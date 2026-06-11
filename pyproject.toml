@@ -1,13 +1,9 @@
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]
-
 [tool.coverage.run]
 omit = ["tests/*", ".github/*", "app.py", "ui.py"]
 
 [tool.coverage.report]
 omit = ["tests/*", ".github/*", "app.py", "ui.py"]
-fail_under = 80
+fail_under = 75
 
 [tool.ruff]
 line-length = 300

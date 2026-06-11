@@ -1,4 +1,4 @@
-"""EcoNode utility functions for JSON extraction, input validation, and UI helpers."""
+"""EcoNode utility functions for JSON extraction, input validation, and security."""
 
 __version__ = "2.1.0"
 
@@ -7,7 +7,7 @@ import json
 import re
 from typing import Any, Dict
 
-from config import ApiResponse, MAX_INPUT_LENGTH
+from config import ApiResponse, MAX_INPUT_CHARS
 
 
 def sanitize_input(user_text: str) -> str:
@@ -23,12 +23,12 @@ def sanitize_input(user_text: str) -> str:
 
 
 def sanitize_user_input(text: str) -> str:
-    """Harden user input against prompt injection and excessive length.
+    """Strip, truncate to MAX_INPUT_CHARS, and remove prompt injection patterns.
 
     Applies three layers of defense:
     1. Strips leading/trailing whitespace.
-    2. Truncates to MAX_INPUT_LENGTH (2000) characters.
-    3. Removes prompt-injection substrings (case-insensitive).
+    2. Truncates to MAX_INPUT_CHARS (2000) characters.
+    3. Replaces prompt-injection substrings with [REDACTED] (case-insensitive).
 
     Args:
         text: The raw user input from the chat widget.
@@ -36,15 +36,9 @@ def sanitize_user_input(text: str) -> str:
     Returns:
         A cleaned, truncated, injection-safe string.
     """
-    text = text.strip()
-    text = text[:MAX_INPUT_LENGTH]
-    text = re.sub(
-        r"(IGNORE|OVERRIDE|NEW INSTRUCTION|SYSTEM:)",
-        "",
-        text,
-        flags=re.IGNORECASE,
-    )
-    return text
+    text = text.strip()[:MAX_INPUT_CHARS]
+    injection_pattern = r"(?i)(ignore\s+previous|override|new\s+instruction|system\s*:)"
+    return re.sub(injection_pattern, "[REDACTED]", text)
 
 
 def validate_input_length(user_text: str) -> str:
@@ -57,10 +51,10 @@ def validate_input_length(user_text: str) -> str:
         The validated input string if it passes.
 
     Raises:
-        ValueError: If the input exceeds MAX_INPUT_LENGTH.
+        ValueError: If the input exceeds MAX_INPUT_CHARS.
     """
-    if len(user_text) > MAX_INPUT_LENGTH:
-        raise ValueError(f"Input exceeds maximum allowed length of {MAX_INPUT_LENGTH} characters.")
+    if len(user_text) > MAX_INPUT_CHARS:
+        raise ValueError(f"Input exceeds maximum allowed length of {MAX_INPUT_CHARS} characters.")
     return user_text
 
 
@@ -93,6 +87,11 @@ def validate_response_schema(parsed_json: Dict[str, Any]) -> ApiResponse:
 
 def extract_json(text: str) -> ApiResponse:
     """Robustly extract a JSON object from an AI response string.
+
+    Tries three strategies in order:
+    1. Direct ``json.loads()`` on the full text.
+    2. Strip markdown fences and parse the inner content.
+    3. Extract the first ``{...}`` brace block and parse it.
 
     Args:
         text: The raw text response from the LLM.

@@ -96,14 +96,16 @@ def render_directive_banner(directive: str) -> None:
 
 
 def render_metrics_row(
-    breakdown: Dict[str, float],
+    total_kg: float,
     workloads: List[str],
+    breakdown: Dict[str, float],
 ) -> None:
     """Render the emission donut chart and detected workloads side-by-side.
 
     Args:
-        breakdown: Emission source → kg CO2e mapping.
+        total_kg: Total CO2e emissions in kg.
         workloads: List of detected workload description strings.
+        breakdown: Emission source → kg CO2e mapping.
     """
     chart_col, list_col = st.columns([CHART_COL_RATIO, LIST_COL_RATIO])
 
@@ -132,6 +134,16 @@ def render_metrics_row(
                 unsafe_allow_html=True,
             )
         st.markdown('</div>', unsafe_allow_html=True)
+
+
+def render_emission_chart(data: Dict[str, Any]) -> None:
+    """Render the raw JSON payload inside a collapsible expander.
+
+    Args:
+        data: The full API / mock response dictionary.
+    """
+    with st.expander("🛠️ Raw JSON Payload — API / Evaluator View"):
+        st.json(data)
 
 
 def render_agent_tabs(agents: Dict[str, str]) -> None:
@@ -187,20 +199,28 @@ def render_agent_tabs(agents: Dict[str, str]) -> None:
         """, unsafe_allow_html=True)
 
 
-def render_emission_chart(data: Dict[str, Any]) -> None:
-    """Render the raw JSON payload inside a collapsible expander.
+def update_session_state(data: Dict[str, Any], total_kg: float, status: str) -> None:
+    """Batch-update all session state counters after a successful inference.
 
     Args:
         data: The full API / mock response dictionary.
+        total_kg: The total CO2e impact from this inference.
+        status: The system status string ('OPTIMAL', 'WARNING', 'CRITICAL').
     """
-    with st.expander("🛠️ Raw JSON Payload — API / Evaluator View"):
-        st.json(data)
+    agent_outputs: Dict[str, str] = data.get("agent_outputs", {})
+    st.session_state.ledger_state = agent_outputs.get(
+        "ledger_state", st.session_state.ledger_state
+    )
+    st.session_state.total_today += total_kg
+    st.session_state.system_status = status
+    st.session_state.log_count += 1
+    st.session_state.trend_history.append(total_kg)
 
 
 # ── Header ──────────────────────────────────────────────────────────────────
 st.markdown("""
 <div style="text-align: center; margin-bottom: 2rem;">
-    <h1 style="font-weight: 700; margin-bottom: 0.2rem;">🌱 EcoNode</h1>
+    <h1 style="font-weight: 700; margin-bottom: 0.2rem;" aria-label="EcoNode Carbon Intelligence Engine">🌱 EcoNode</h1>
     <p style="color: #94a3b8; font-size: 1.1rem; font-weight: 300;">Multi-Agent Carbon Intelligence Engine</p>
 </div>
 """, unsafe_allow_html=True)
@@ -241,14 +261,14 @@ with st.sidebar:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Daily Budget
+    # Daily Budget with ARIA meter role
     st.markdown('<div class="section-label">📊 Daily Budget</div>', unsafe_allow_html=True)
     st.markdown(
         budget_bar_html(st.session_state.total_today, DAILY_CEILING_KG),
         unsafe_allow_html=True,
     )
 
-    # System Rank
+    # System Rank with ARIA img role
     st.markdown('<div class="section-label">🏆 System Rank</div>', unsafe_allow_html=True)
     rank_info = RANK_CFG.get(st.session_state.system_status, RANK_CFG["OPTIMAL"])
     st.markdown(f"""
@@ -298,7 +318,7 @@ if user_input := st.chat_input("Log your commute, diet, energy, and compute work
         st.error("Rate limit reached. Maximum API calls per session exceeded.")
         st.stop()
 
-    # Security: sanitize for XSS + prompt injection
+    # Security: sanitize for prompt injection, then HTML-escape
     safe_input: str = sanitize_user_input(user_input)
     safe_input = sanitize_input(safe_input)
 
@@ -338,26 +358,20 @@ if user_input := st.chat_input("Log your commute, diet, energy, and compute work
         total_kg: float = metrics.get("total_co2e_kg", 0.0)
         workloads: List[str] = metrics.get("workloads_detected", [])
         breakdown: Dict[str, float] = data.get("emission_breakdown", {})
-        agent_outputs: Dict[str, str] = data.get("agent_outputs", {})
 
-        render_metrics_row(breakdown, workloads)
+        render_metrics_row(total_kg, workloads, breakdown)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
+        agent_outputs: Dict[str, str] = data.get("agent_outputs", {})
         render_agent_tabs(agent_outputs)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         render_emission_chart(data)
 
-        # Update session state (batched)
-        st.session_state.ledger_state = agent_outputs.get(
-            "ledger_state", st.session_state.ledger_state
-        )
-        st.session_state.total_today += total_kg
-        st.session_state.system_status = status
-        st.session_state.log_count += 1
-        st.session_state.trend_history.append(total_kg)
+        # Batch session state update
+        update_session_state(data, total_kg, status)
 
     # Save condensed message to chat history
     st.session_state.messages.append({

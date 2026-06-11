@@ -1,20 +1,34 @@
-"""EcoNode configuration constants, TypedDicts, and master prompt."""
+"""EcoNode configuration constants, TypedDicts, and master prompt.
+
+Central configuration module containing all emission factors, UI theming,
+and the master system prompt for the Gemini inference engine.
+"""
 
 __version__ = "2.1.0"
 
 from typing import Dict, List, TypedDict
 
-# Magic number replacements
+# ── Emission Factor Constants ───────────────────────────────────────────────
 DAILY_CEILING_KG: float = 15.0
-MAX_INPUT_LENGTH: int = 2000
-MAX_API_CALLS_PER_SESSION: int = 10
-PEAK_GRID_MULTIPLIER: float = 1.18
-OFF_PEAK_GRID_MULTIPLIER: float = 0.76
+WEEKLY_CEILING_KG: float = 105.0
+PEAK_MULTIPLIER: float = 1.18
+OFFPEAK_MULTIPLIER: float = 0.76
+GASOLINE_FACTOR_KG_PER_KM: float = 0.210
 PETROL_SEDAN_KG_PER_KM: float = 0.170
 ELECTRIC_AUTO_KG_PER_KM: float = 0.045
+INDIA_GRID_INTENSITY: float = 0.820
+RTX4070_LOAD_KW: float = 0.115
 GPU_KG_PER_HOUR: float = 0.095
-INDIA_GRID_KG_PER_KWH: float = 0.820
-WEEKLY_CEILING_KG: float = 105.0
+AC_DRAW_KW: float = 1.50
+CHICKEN_CO2E_KG: float = 1.38
+VEG_MEAL_CO2E_KG: float = 0.60
+
+# ── Application Limits ─────────────────────────────────────────────────────
+MAX_INPUT_CHARS: int = 2000
+MAX_INPUT_LENGTH: int = 2000
+MAX_API_CALLS_PER_SESSION: int = 10
+
+# ── TypedDicts ──────────────────────────────────────────────────────────────
 
 class IngestionMetrics(TypedDict):
     """Type definition for ingestion metrics."""
@@ -36,15 +50,17 @@ class ApiResponse(TypedDict):
     agent_outputs: AgentOutputs
     deployment_directive: str
 
+# ── UI Theme Configuration ──────────────────────────────────────────────────
+
 STATUS_CFG: Dict[str, Dict[str, str]] = {
     "OPTIMAL": {"icon": "🟢", "cls": "eco-optimal", "color": "#10b981"},
-    "WARNING":  {"icon": "🟡", "cls": "eco-warning",  "color": "#f59e0b"},
-    "CRITICAL": {"icon": "🔴", "cls": "eco-critical",  "color": "#ef4444"},
+    "WARNING": {"icon": "🟡", "cls": "eco-warning", "color": "#f59e0b"},
+    "CRITICAL": {"icon": "🔴", "cls": "eco-critical", "color": "#ef4444"},
 }
 
 RANK_CFG: Dict[str, Dict[str, str]] = {
-    "OPTIMAL": {"label": "🌿 Carbon Neutral",   "bg": "#052e16", "fg": "#34d399", "border": "#10b981"},
-    "WARNING":  {"label": "⚠️ Carbon Debtor L1", "bg": "#451a03", "fg": "#fbbf24", "border": "#f59e0b"},
+    "OPTIMAL": {"label": "🌿 Carbon Neutral", "bg": "#052e16", "fg": "#34d399", "border": "#10b981"},
+    "WARNING": {"label": "⚠️ Carbon Debtor L1", "bg": "#451a03", "fg": "#fbbf24", "border": "#f59e0b"},
     "CRITICAL": {"label": "🔴 Carbon Debtor L2", "bg": "#450a0a", "fg": "#f87171", "border": "#ef4444"},
 }
 
@@ -53,6 +69,8 @@ CHART_COLORS: List[str] = [
     "#8b5cf6", "#06b6d4", "#ec4899", "#f97316",
     "#a3e635", "#fb923c",
 ]
+
+# ── Master System Prompt ────────────────────────────────────────────────────
 
 MASTER_PROMPT: str = """
 ROLE AND SYSTEM BOUNDARIES:

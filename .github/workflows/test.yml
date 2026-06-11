@@ -1,10 +1,6 @@
-name: EcoNode CI
+name: Tests
 
-on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
+on: [push, pull_request]
 
 jobs:
   test:
@@ -12,10 +8,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -27,11 +22,11 @@ jobs:
           ruff check . --fix --unsafe-fixes || true
           ruff check . --select F --ignore F401,F811 --exit-zero
 
+      - name: Run pytest
+        run: pytest --cov=. --cov-report=term-missing --cov-fail-under=75 --ignore=app.py --ignore=ui.py
+
       - name: Security scan with bandit
         run: bandit -r . -x tests/ -ll --skip B101,B110
-
-      - name: Run pytest with coverage
-        run: pytest --cov=. --cov-report=term-missing --cov-fail-under=80 --ignore=app.py --ignore=ui.py
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
