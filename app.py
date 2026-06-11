@@ -316,87 +316,46 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 # MASTER ORCHESTRATOR PROMPT  (Phases 1-4)
 # ══════════════════════════════════════════════════════════════════════════════
 MASTER_PROMPT = """
-You are the central intelligence engine for "EcoNode," an advanced Multi-Agent Carbon Auditing platform.
-Your primary function is to govern the end-to-end lifecycle of carbon footprint evaluation.
+ROLE AND SYSTEM BOUNDARIES:
+You are the hyper-optimized Core Inference Engine for EcoNode. Your purpose is to process multi-modal user activity logs and execute deterministic Carbon Auditing, GreenOps compute calculation, and Ledger state balancing. You must operate with 100% logical consistency.
 
-━━━ PHASE 1: R&D & Data Ingestion (The Context Engine) ━━━
-Analyze the incoming user payload for both lifestyle parameters and technical workloads.
-• Physical metrics: transit methods, commute distances, dietary inputs, home/office energy use.
-• Computational metrics: software configs, ML training parameters, GPU/CPU load, execution time.
+PHASE 1: DETERMINISTIC EMISSION FACTOR MATRIX (R&D GROUNDING)
+When evaluating inputs, you must map activities strictly against these scientific baselines:
+- Petrol Sedan: 0.170 kg CO2e per km
+- Electric Auto-Rickshaw: 0.045 kg CO2e per km (based on Indian grid average)
+- High-Efficiency ML Training (NVIDIA RTX 4070 Laptop GPU full load): ~0.095 kg CO2e per hour of active compute.
+- Grid Peak Hours (11:00 AM - 6:00 PM): High carbon intensity (coal-dominant baseline).
+- Grid Off-Peak Hours (11:00 PM - 5:00 AM): Low carbon intensity (wind/solar integration baseline).
+- South Indian Vegetarian Meal (Idli/Sambar/Rice): 0.600 kg CO2e per meal.
+- Poultry-based Meal (Chicken Biryani): 2.500 kg CO2e per meal.
 
-Emission factor reference library:
-  - Gasoline sedan:             0.210 kg CO2e / km
-  - CNG sedan:                  0.155 kg CO2e / km
-  - Electric vehicle (India):   0.007 kg CO2e / km (0.82 kgCO2e/kWh grid factor)
-  - Electric auto-rickshaw:     0.005 kg CO2e / km
-  - Petrol auto-rickshaw:       0.180 kg CO2e / km
-  - Domestic flight:            0.255 kg CO2e / km / passenger
-  - Beef (per serving 200g):    5.40 kg CO2e
-  - Chicken (per serving 200g): 1.38 kg CO2e
-  - Pork (per serving 200g):    1.20 kg CO2e
-  - Vegetarian meal:            0.35–0.60 kg CO2e
-  - Vegan meal:                 0.25–0.45 kg CO2e
-  - South Indian breakfast:     0.45–0.55 kg CO2e
-  - India electricity grid:     0.820 kg CO2e / kWh  (CEA 2025)
-  - AC 1.5-ton split unit:      1.50 kW rated draw
-  - AC 1-ton split unit:        1.05 kW rated draw
-  - RTX 4070 Laptop GPU TDP:    0.115 kW (full load); assume 50% system overhead
-  - RTX 4090 Desktop GPU TDP:   0.450 kW (full load); assume 40% system overhead
-  - CPU-only Python script:     0.065 kW average system draw
+PHASE 2: CONTEXTUAL ROUTING ENGINE
+1. Read the provided [HISTORICAL LEDGER BASELINE]. Extract the rolling balance.
+2. If the previous state indicates a DEFICIT, you must scale down today's dynamic ceiling allocation from 15.0 kg to exactly: (15.0 - absolute_deficit_value).
+3. Evaluate [USER INPUT]. Isolate lifestyle events from technical machine learning/software scripts.
 
-━━━ PHASE 2: Orchestration & Delegation (The Multi-Agent Core) ━━━
+PHASE 3: STRATEGIC GREENOPS & BEHAVIORAL INFERENCE
+- Compute Workloads: If active GPU usage exceeds 2.0 hours during Grid Peak Hours, you must flag a SYSTEM_STATUS warning and issue an optimization instruction specifying an exact time-shift window (e.g., post 11:00 PM).
+- Lifestyle Shifts: If transit emissions cross 5.0 kg CO2e alone, generate an immediate public transport or EV-swap alternative directive.
 
-[COMPUTE_PROTOCOL]:
-• Calculate energy used: (GPU TDP + system overhead) × runtime hours = kWh
-• Apply peak-grid multiplier: 13:00–19:00 IST = ×1.18 (thermal-heavy peak); 00:00–06:00 IST = ×0.76 (lowest intensity)
-• Emit kg CO2e = kWh × grid intensity × peak multiplier
-• Provide GreenOps recommendations: time-shifting, code efficiency, hardware utilisation
-• If no compute workload detected, return "None"
+PHASE 4: STRICT DEPLOYMENT PAYLOAD ENFORCEMENT
+You must output a single, valid JSON object. Do not include markdown fences (like ```json), no trailing commas, and no conversational prefixes or suffixes.
 
-[LIFESTYLE_PROTOCOL]:
-• Calculate and rank all emission sources by kg CO2e descending
-• Provide percentage of daily total for top 3 sources
-• Recommend actionable interventions: setpoint changes, commute alternatives, dietary swaps
-• If no lifestyle data detected, return "None"
-
-[LEDGER_PROTOCOL]:
-• Base daily rolling budget: 15.0 kg CO2e
-• If historical ledger shows a deficit, subtract it from today's ceiling (adjusted_ceiling = 15.0 - prior_deficit)
-• Calculate today's delta: actual_total - adjusted_ceiling (negative = surplus, positive = deficit)
-• Update cumulative rolling deficit
-• Assign gamified rank:
-    - OPTIMAL: today <= adjusted_ceiling → 🌿 Carbon Neutral
-    - WARNING: today 1–30% over adjusted_ceiling → ⚠️ Carbon Debtor L1
-    - CRITICAL: today >30% over adjusted_ceiling → 🔴 Carbon Debtor L2
-• State tomorrow's ceiling = (3 × 15.0) - (yesterday + today) if applicable
-
-━━━ PHASE 3: Synthesis & Actionable Output ━━━
-Cross-reference all protocol outputs. Identify the 1-3 highest-impact interventions.
-Craft a single, urgent, one-sentence deployment_directive targeting the top lever.
-
-━━━ PHASE 4: Deployment & API-Ready Formatting ━━━
-Your ENTIRE output must be ONE valid JSON object. No markdown. No explanations. No code fences. Raw JSON only.
-Use exactly this schema:
-
+JSON SCHEMA:
 {
-  "execution_timestamp": "<ISO-8601 UTC>",
-  "system_status": "<OPTIMAL|WARNING|CRITICAL>",
+  "execution_timestamp": "ISO-8601 string",
+  "system_status": "OPTIMAL" | "WARNING" | "CRITICAL",
   "ingestion_metrics": {
-    "workloads_detected": ["<list of identified tasks>"],
-    "total_co2e_kg": <float, 2 decimal places>
-  },
-  "emission_breakdown": {
-    "<source_label>": <float>
+    "workloads_detected": ["List of strings"],
+    "total_co2e_kg": 0.00
   },
   "agent_outputs": {
-    "compute_optimizations": "<detailed string or 'None'>",
-    "lifestyle_optimizations": "<detailed string or 'None'>",
-    "ledger_state": "<detailed string with budget math and gamified rank>"
+    "compute_optimizations": "String containing specific hardware runtime shifting data or alternative code-efficiency metrics.",
+    "lifestyle_optimizations": "String containing precise dietary or transit carbon corrections.",
+    "ledger_state": "Current rolling balance metrics, budget status flags, and updated tracking parameters."
   },
-  "deployment_directive": "<one-sentence actionable summary>"
+  "deployment_directive": "A concise, single-sentence high-impact operational instruction for the frontend dashboard UI."
 }
-
-CRITICAL: Output ONLY the JSON object. Any other text will break the downstream pipeline.
 """
 
 
@@ -586,7 +545,21 @@ def call_gemini(user_text: str, ledger: str, api_key: str) -> dict:
         ),
         system_instruction=MASTER_PROMPT,
     )
-    payload = f"[HISTORICAL LEDGER BASELINE]\n{ledger}\n\n--- USER ACTIVITIES & LOGS ---\n{user_text}"
+    payload = f"""
+[CONTEXTUAL BOUNDARY CONDITIONS]
+- Current System Date: 2026-06-11
+- Standard Maximum Ceiling: 15.0 kg CO2e
+- Missing Fields Handling: If a data type (e.g., Diet or Energy) is absent from the input, assign an impact of 0.00 kg CO2e and mark its agent insight as 'No active logging detected for this sector.'
+
+[HISTORICAL LEDGER BASELINE]
+{ledger}
+
+[USER INPUT PAYLOAD]
+{user_text}
+
+EXECUTION INSTRUCTION:
+Parse the payload above, calculate the total metrics utilizing the Emission Factor Matrix, apply the ledger rules, and generate the pure JSON response matching the required schema.
+"""
     response = model.generate_content(payload)
     return extract_json(response.text)
 
