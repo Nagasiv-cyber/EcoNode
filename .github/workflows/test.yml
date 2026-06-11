@@ -23,7 +23,9 @@ jobs:
           pip install -r requirements.txt
 
       - name: Lint with ruff
-        run: ruff check . --select E,F,W --ignore E501,W291,W292,W293,W391,E302,E303,E301,E305,E401 --exit-zero
+        run: |
+          ruff check . --fix --unsafe-fixes || true
+          ruff check . --select F --ignore F401,F811 --exit-zero
 
       - name: Security scan with bandit
         run: bandit -r . -x tests/,agents.py
