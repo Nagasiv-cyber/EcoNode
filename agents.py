@@ -49,7 +49,7 @@ def call_gemini(user_text: str, ledger: str, api_key: str) -> ApiResponse:
     model = get_gemini_model(api_key)
     payload = f"""
 [CONTEXTUAL BOUNDARY CONDITIONS]
-- Current System Date: {datetime.datetime.utcnow().strftime('%Y-%m-%d')}
+- Current System Date: {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')}
 - Standard Maximum Ceiling: {DAILY_CEILING_KG} kg CO2e
 - Missing Fields Handling: If a data type (e.g., Diet or Energy) is absent from the input, assign an impact of 0.00 kg CO2e and mark its agent insight as 'No active logging detected for this sector.'
 
@@ -77,7 +77,7 @@ def mock_response(user_text: str) -> ApiResponse:
     """
     time.sleep(2.2)  # Simulate API latency
     return {
-        "execution_timestamp": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "execution_timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "system_status": "WARNING",
         "ingestion_metrics": {
             "workloads_detected": [

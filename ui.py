@@ -151,7 +151,8 @@ def budget_bar_html(used: float, ceiling: float = 15.0) -> str:
     Returns:
         str: HTML string.
     """
-    pct = min(used / max(ceiling, 0.01) * 100, 100)
+    pct = used / max(ceiling, 0.01) * 100
+    fill_pct = min(pct, 100)
     color = "#10b981" if pct <= 70 else "#f59e0b" if pct <= 100 else "#ef4444"
     return f"""
     <div style="margin:0.2rem 0 0.5rem;" aria-label="Budget Progress Bar: {used:.2f} kg out of {ceiling:.1f} kg">
@@ -160,7 +161,7 @@ def budget_bar_html(used: float, ceiling: float = 15.0) -> str:
             <span style="color:#64748b;font-size:0.7rem;">of {ceiling:.1f} kg</span>
         </div>
         <div class="budget-track" aria-hidden="true">
-            <div class="budget-fill" style="width:{pct:.1f}%;background:linear-gradient(90deg,{color},{color}88);"></div>
+            <div class="budget-fill" style="width:{fill_pct:.1f}%;background:linear-gradient(90deg,{color},{color}88);"></div>
         </div>
     </div>
     """
