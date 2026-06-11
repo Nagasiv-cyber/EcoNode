@@ -1,8 +1,5 @@
-"""
-EcoNode Main Application Entry.
+"""EcoNode main Streamlit entry point. Run with: streamlit run app.py"""
 
-Version: 2.1.0
-"""
 __version__ = "2.1.0"
 
 import streamlit as st
@@ -106,8 +103,10 @@ for msg in st.session_state.messages:
 # Chat Input & Orchestration
 if user_input := st.chat_input("Log your commute, diet, energy, and compute workloads..."):
     
-    if not validate_input_length(user_input):
-        st.error(f"Input exceeds maximum allowed length of {MAX_INPUT_LENGTH} characters.")
+    try:
+        validate_input_length(user_input)
+    except ValueError as e:
+        st.error(str(e))
         st.stop()
         
     if st.session_state.api_calls >= MAX_API_CALLS_PER_SESSION and api_key:
@@ -126,7 +125,7 @@ if user_input := st.chat_input("Log your commute, diet, energy, and compute work
     with st.chat_message("assistant"):
         with st.spinner("Multi-Agent Engine evaluating payload..."):
             try:
-                data = run_orchestrator(safe_input, st.session_state.ledger_state, api_key)
+                data = run_orchestrator(safe_input, st.session_state.ledger_state, api_key, st.session_state.api_calls)
             except Exception as e:
                 st.error(f"Execution failed: {e}")
                 st.stop()
@@ -136,7 +135,7 @@ if user_input := st.chat_input("Log your commute, diet, energy, and compute work
         
         # Header Badge
         st.markdown(f"""
-        <div class="status-badge" style="background:{cfg['color']}15; color:{cfg['color']}; border:1px solid {cfg['color']}50;" role="status">
+        <div class="status-badge" style="background:{cfg['color']}15; color:{cfg['color']}; border:1px solid {cfg['color']}50;" role="status" aria-label="System status: {status}">
             <span aria-hidden="true">{cfg['icon']}</span> SYSTEM {status}
         </div>
         """, unsafe_allow_html=True)
@@ -144,7 +143,7 @@ if user_input := st.chat_input("Log your commute, diet, energy, and compute work
         # Directive
         directive = data.get("deployment_directive", "Maintain current operational parameters.")
         st.markdown(f"""
-        <div class="directive-banner" role="status" aria-live="polite">
+        <div class="directive-banner" role="alert" aria-live="assertive" aria-label="Deployment directive">
             <span>ACTION REQUIRED:</span> {directive}
         </div>
         """, unsafe_allow_html=True)
@@ -164,7 +163,7 @@ if user_input := st.chat_input("Log your commute, diet, energy, and compute work
         with list_col:
             st.markdown('<div class="section-label" aria-label="Detected Workloads">📋 Detected Workloads</div>', unsafe_allow_html=True)
             for w in workloads:
-                st.markdown(f'<div class="workload-tag"><span style="color:#10b981;margin-top:1px;" aria-hidden="true">▸</span><span>{w}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="workload-tag" role="listitem" aria-label="Detected workload: {w}"><span style="color:#10b981;margin-top:1px;" aria-hidden="true">▸</span><span>{w}</span></div>', unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -176,7 +175,7 @@ if user_input := st.chat_input("Log your commute, diet, energy, and compute work
             txt = agents.get("compute_optimizations", "None")
             if txt and txt.strip().lower() != "none":
                 st.markdown(f"""
-                <div class="agent-card">
+                <div class="agent-card" role="region" aria-label="Compute Agent analysis output">
                     <div class="agent-card-label">⚙️ [COMPUTE_PROTOCOL] — GreenOps Analysis</div>
                     <div class="agent-card-body">{txt}</div>
                 </div>
@@ -188,7 +187,7 @@ if user_input := st.chat_input("Log your commute, diet, energy, and compute work
             txt = agents.get("lifestyle_optimizations", "None")
             if txt and txt.strip().lower() != "none":
                 st.markdown(f"""
-                <div class="agent-card">
+                <div class="agent-card" role="region" aria-label="Lifestyle Agent analysis output">
                     <div class="agent-card-label">🌿 [LIFESTYLE_PROTOCOL] — Behavioral Analysis</div>
                     <div class="agent-card-body">{txt}</div>
                 </div>
@@ -199,7 +198,7 @@ if user_input := st.chat_input("Log your commute, diet, energy, and compute work
         with tab_lg:
             txt = agents.get("ledger_state", "")
             st.markdown(f"""
-            <div class="agent-card">
+            <div class="agent-card" role="region" aria-label="Ledger Agent analysis output">
                 <div class="agent-card-label">📒 [LEDGER_PROTOCOL] — Rolling Budget State</div>
                 <div class="agent-card-body">{txt}</div>
             </div>

@@ -1,8 +1,5 @@
-"""
-UI components and rendering logic for EcoNode.
+"""EcoNode Streamlit UI rendering functions with full ARIA accessibility support."""
 
-Version: 2.1.0
-"""
 __version__ = "2.1.0"
 
 import streamlit as st
@@ -12,17 +9,16 @@ try:
 except ImportError:
     PLOTLY_AVAILABLE = False
 import pandas as pd
-from typing import Dict
+from typing import Dict, List
 
 from config import CHART_COLORS
 
 @st.cache_data
 def get_css() -> str:
-    """
-    Return the cached CSS styling block.
+    """Return the cached CSS styling block.
     
     Returns:
-        str: HTML string containing CSS styles.
+        HTML string containing CSS styles.
     """
     return """
     <!-- Content Security Policy: Google Fonts -->
@@ -39,8 +35,8 @@ def get_css() -> str:
     
     /* Ensure visible focus indicators for accessibility */
     *:focus-visible {
-        outline: 2px solid #3b82f6 !important;
-        outline-offset: 2px;
+        outline: 2px solid #10b981 !important;
+        outline-offset: 2px !important;
     }
 
     .eco-optimal { background-color: #064e3b !important; color: #34d399 !important; border: 1px solid #10b981; }
@@ -141,21 +137,20 @@ def get_css() -> str:
     """
 
 def budget_bar_html(used: float, ceiling: float = 15.0) -> str:
-    """
-    Generate the HTML string for the real-time budget progress bar.
+    """Generate the HTML string for the real-time budget progress bar.
     
     Args:
-        used (float): The amount of CO2e used.
-        ceiling (float): The maximum allowed CO2e.
+        used: The amount of CO2e used.
+        ceiling: The maximum allowed CO2e.
         
     Returns:
-        str: HTML string.
+        HTML string.
     """
     pct = used / max(ceiling, 0.01) * 100
     fill_pct = min(pct, 100)
     color = "#10b981" if pct <= 70 else "#f59e0b" if pct <= 100 else "#ef4444"
     return f"""
-    <div style="margin:0.2rem 0 0.5rem;" aria-label="Budget Progress Bar: {used:.2f} kg out of {ceiling:.1f} kg">
+    <div style="margin:0.2rem 0 0.5rem;" role="progressbar" aria-valuenow="{used}" aria-valuemin="0" aria-valuemax="{ceiling}" aria-label="Daily carbon budget: {used:.2f} kg of {ceiling:.1f} kg used">
         <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
             <span style="color:#94a3b8;font-size:0.7rem;font-weight:600;">{used:.2f} kg used</span>
             <span style="color:#64748b;font-size:0.7rem;">of {ceiling:.1f} kg</span>
@@ -166,12 +161,11 @@ def budget_bar_html(used: float, ceiling: float = 15.0) -> str:
     </div>
     """
 
-def render_donut_chart(breakdown: Dict[str, float]):
-    """
-    Render a Plotly donut chart for the emission breakdown.
+def render_donut_chart(breakdown: Dict[str, float]) -> None:
+    """Render a Plotly donut chart for the emission breakdown.
     
     Args:
-        breakdown (dict): Dictionary mapping source strings to float values.
+        breakdown: Dictionary mapping source strings to float values.
     """
     if not PLOTLY_AVAILABLE or not breakdown:
         st.caption("Chart disabled or no data available.")
@@ -214,12 +208,11 @@ def render_donut_chart(breakdown: Dict[str, float]):
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-def render_trend_chart(history: list):
-    """
-    Render a simple line chart of total CO2e per session turn.
+def render_trend_chart(history: List[float]) -> None:
+    """Render a simple line chart of total CO2e per session turn.
     
     Args:
-        history (list): List of floats representing total CO2e over time.
+        history: List of floats representing total CO2e over time.
     """
     if not history:
         st.caption("No trend data yet.")

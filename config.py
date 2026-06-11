@@ -1,28 +1,34 @@
-"""
-Configuration and constants for EcoNode.
+"""EcoNode configuration constants, TypedDicts, and master prompt."""
 
-Version: 2.1.0
-"""
 __version__ = "2.1.0"
 
 from typing import TypedDict, List, Dict
 
-# Constants
-DAILY_CEILING_KG = 15.0
-MAX_INPUT_LENGTH = 2000
-MAX_API_CALLS_PER_SESSION = 10
+# Magic number replacements
+DAILY_CEILING_KG: float = 15.0
+MAX_INPUT_LENGTH: int = 2000
+MAX_API_CALLS_PER_SESSION: int = 10
+PEAK_GRID_MULTIPLIER: float = 1.18
+OFF_PEAK_GRID_MULTIPLIER: float = 0.76
+PETROL_SEDAN_KG_PER_KM: float = 0.170
+ELECTRIC_AUTO_KG_PER_KM: float = 0.045
+GPU_KG_PER_HOUR: float = 0.095
+INDIA_GRID_KG_PER_KWH: float = 0.820
+WEEKLY_CEILING_KG: float = 105.0
 
-# Types
 class IngestionMetrics(TypedDict):
+    """Type definition for ingestion metrics."""
     workloads_detected: List[str]
     total_co2e_kg: float
 
 class AgentOutputs(TypedDict):
+    """Type definition for agent outputs."""
     compute_optimizations: str
     lifestyle_optimizations: str
     ledger_state: str
 
 class ApiResponse(TypedDict):
+    """Type definition for the Gemini API response."""
     execution_timestamp: str
     system_status: str
     ingestion_metrics: IngestionMetrics
@@ -30,26 +36,25 @@ class ApiResponse(TypedDict):
     agent_outputs: AgentOutputs
     deployment_directive: str
 
-# Config Dictionaries
-STATUS_CFG = {
+STATUS_CFG: Dict[str, Dict[str, str]] = {
     "OPTIMAL": {"icon": "🟢", "cls": "eco-optimal", "color": "#10b981"},
     "WARNING":  {"icon": "🟡", "cls": "eco-warning",  "color": "#f59e0b"},
     "CRITICAL": {"icon": "🔴", "cls": "eco-critical",  "color": "#ef4444"},
 }
 
-RANK_CFG = {
+RANK_CFG: Dict[str, Dict[str, str]] = {
     "OPTIMAL": {"label": "🌿 Carbon Neutral",   "bg": "#052e16", "fg": "#34d399", "border": "#10b981"},
     "WARNING":  {"label": "⚠️ Carbon Debtor L1", "bg": "#451a03", "fg": "#fbbf24", "border": "#f59e0b"},
     "CRITICAL": {"label": "🔴 Carbon Debtor L2", "bg": "#450a0a", "fg": "#f87171", "border": "#ef4444"},
 }
 
-CHART_COLORS = [
+CHART_COLORS: List[str] = [
     "#10b981", "#34d399", "#f59e0b", "#ef4444",
     "#8b5cf6", "#06b6d4", "#ec4899", "#f97316",
     "#a3e635", "#fb923c",
 ]
 
-MASTER_PROMPT = """
+MASTER_PROMPT: str = """
 ROLE AND SYSTEM BOUNDARIES:
 You are the hyper-optimized Core Inference Engine for EcoNode. Your purpose is to process multi-modal user activity logs and execute deterministic Carbon Auditing, GreenOps compute calculation, and Ledger state balancing. You must operate with 100% logical consistency.
 

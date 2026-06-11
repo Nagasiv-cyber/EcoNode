@@ -1,52 +1,45 @@
-"""
-Agent and API logic for EcoNode.
+"""EcoNode agent orchestration: Gemini API calls, mock responses, and routing."""
 
-Version: 2.1.0
-"""
 __version__ = "2.1.0"
 
 import time
 import datetime
 import streamlit as st
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
-from config import MASTER_PROMPT, ApiResponse, DAILY_CEILING_KG
+from config import (
+    MASTER_PROMPT, 
+    ApiResponse, 
+    DAILY_CEILING_KG, 
+    MAX_API_CALLS_PER_SESSION
+)
 from utils import extract_json
 
 @st.cache_resource
-def get_gemini_model(api_key: str):
-    """
-    Instantiate and cache the Gemini model to avoid re-initialization.
+def get_gemini_client(api_key: str) -> genai.Client:
+    """Instantiate and cache the Gemini client to avoid re-initialization.
     
     Args:
-        api_key (str): The Google Gemini API Key.
+        api_key: The Google Gemini API Key.
         
     Returns:
-        genai.GenerativeModel: The configured model instance.
+        The configured client instance.
     """
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel(
-        model_name="gemini-1.5-pro-latest",
-        generation_config=genai.types.GenerationConfig(
-            temperature=0.1,
-            response_mime_type="application/json",
-        ),
-        system_instruction=MASTER_PROMPT,
-    )
+    return genai.Client(api_key=api_key)
 
 def call_gemini(user_text: str, ledger: str, api_key: str) -> ApiResponse:
-    """
-    Call the Gemini API with the given payload.
+    """Call the Gemini API with the given payload using the google-genai SDK.
     
     Args:
-        user_text (str): The sanitized user log input.
-        ledger (str): The historical ledger state.
-        api_key (str): The Gemini API Key.
+        user_text: The sanitized user log input.
+        ledger: The historical ledger state.
+        api_key: The Gemini API Key.
         
     Returns:
-        ApiResponse: The parsed JSON dictionary from the model.
+        The parsed JSON dictionary from the model.
     """
-    model = get_gemini_model(api_key)
+    client = get_gemini_client(api_key)
     payload = f"""
 [CONTEXTUAL BOUNDARY CONDITIONS]
 - Current System Date: {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')}
@@ -62,21 +55,28 @@ def call_gemini(user_text: str, ledger: str, api_key: str) -> ApiResponse:
 EXECUTION INSTRUCTION:
 Parse the payload above, calculate the total metrics utilizing the Emission Factor Matrix, apply the ledger rules, and generate the pure JSON response matching the required schema.
 """
-    response = model.generate_content(payload)
-    return extract_json(response.text)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        config=types.GenerateContentConfig(
+            system_instruction=MASTER_PROMPT,
+            temperature=0.1,
+            response_mime_type="application/json",
+        ),
+        contents=payload,
+    )
+    return extract_json(response.text or "")
 
 def mock_response(user_text: str) -> ApiResponse:
-    """
-    Provide a deterministic mock response for demo mode.
+    """Provide a deterministic mock response for demo mode.
     
     Args:
-        user_text (str): The raw user input.
+        user_text: The raw user input.
         
     Returns:
-        ApiResponse: A mocked JSON dictionary.
+        A mocked JSON dictionary matching the ApiResponse schema.
     """
     time.sleep(2.2)  # Simulate API latency
-    return {
+    return {  # type: ignore
         "execution_timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "system_status": "WARNING",
         "ingestion_metrics": {
@@ -126,18 +126,24 @@ def mock_response(user_text: str) -> ApiResponse:
         ),
     }
 
-def run_orchestrator(user_text: str, ledger: str, api_key: str = "") -> ApiResponse:
-    """
-    Route the request to the API or the mock depending on credentials.
+def run_orchestrator(user_text: str, ledger: str, api_key: str = "", call_count: int = 0) -> ApiResponse:
+    """Route the request to the API or the mock depending on credentials.
     
     Args:
-        user_text (str): Sanitized user text.
-        ledger (str): Ledger text.
-        api_key (str): API key (optional).
+        user_text: Sanitized user text.
+        ledger: Ledger text.
+        api_key: API key (optional).
+        call_count: Current number of API calls made in this session.
         
     Returns:
-        ApiResponse: Evaluated payload.
+        Evaluated payload dictionary.
+        
+    Raises:
+        RuntimeError: If rate limit is exceeded.
     """
+    if call_count > MAX_API_CALLS_PER_SESSION:
+        raise RuntimeError("Rate limit reached. Maximum API calls per session exceeded.")
+        
     if api_key:
         try:
             return call_gemini(user_text, ledger, api_key)
