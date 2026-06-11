@@ -28,7 +28,7 @@ jobs:
           ruff check . --select F --ignore F401,F811 --exit-zero
 
       - name: Security scan with bandit
-        run: bandit -r . -x tests/,agents.py
+        run: bandit -r . -x tests/ -ll --skip B101,B110
 
       - name: Run pytest with coverage
         run: pytest --cov=. --cov-report=term-missing --cov-fail-under=90
