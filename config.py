@@ -2,7 +2,7 @@
 
 __version__ = "2.1.0"
 
-from typing import TypedDict, List, Dict
+from typing import Dict, List, TypedDict
 
 # Magic number replacements
 DAILY_CEILING_KG: float = 15.0

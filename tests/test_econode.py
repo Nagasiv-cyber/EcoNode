@@ -4,14 +4,14 @@ Version: 2.1.0
 """
 __version__ = "2.1.0"
 
-import pytest
-import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from config import MAX_INPUT_LENGTH, DAILY_CEILING_KG, MAX_API_CALLS_PER_SESSION
-from utils import sanitize_input, validate_input_length, extract_json, validate_response_schema
-from ui import budget_bar_html
+import pytest
+
 from agents import mock_response, run_orchestrator
+from config import MAX_INPUT_LENGTH
+from ui import budget_bar_html
+from utils import extract_json, sanitize_input, validate_input_length, validate_response_schema
 
 # ── Utils Tests ─────────────────────────────────────────────────────────────
 
@@ -192,5 +192,5 @@ def test_run_orchestrator_rate_limit():
     """Should raise after MAX_API_CALLS_PER_SESSION exceeded."""
     from config import MAX_API_CALLS_PER_SESSION
     with pytest.raises(RuntimeError, match="Rate limit"):
-        run_orchestrator("test", "ledger", "fakekey", 
+        run_orchestrator("test", "ledger", "fakekey",
                         call_count=MAX_API_CALLS_PER_SESSION + 1)

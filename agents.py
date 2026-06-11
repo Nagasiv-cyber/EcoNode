@@ -2,16 +2,17 @@
 
 __version__ = "2.1.0"
 
-import time
 import datetime
+import time
+
 import streamlit as st
 from google import genai
 from google.genai import types
 
 from config import (
-    MASTER_PROMPT, 
-    ApiResponse, 
-    DAILY_CEILING_KG, 
+    ApiResponse,
+    DAILY_CEILING_KG,
+    MASTER_PROMPT,
     MAX_API_CALLS_PER_SESSION
 )
 from utils import extract_json
@@ -19,10 +20,10 @@ from utils import extract_json
 @st.cache_resource
 def get_gemini_client(api_key: str) -> genai.Client:
     """Instantiate and cache the Gemini client to avoid re-initialization.
-    
+
     Args:
         api_key: The Google Gemini API Key.
-        
+
     Returns:
         The configured client instance.
     """
@@ -30,12 +31,12 @@ def get_gemini_client(api_key: str) -> genai.Client:
 
 def call_gemini(user_text: str, ledger: str, api_key: str) -> ApiResponse:
     """Call the Gemini API with the given payload using the google-genai SDK.
-    
+
     Args:
         user_text: The sanitized user log input.
         ledger: The historical ledger state.
         api_key: The Gemini API Key.
-        
+
     Returns:
         The parsed JSON dictionary from the model.
     """
@@ -68,10 +69,10 @@ Parse the payload above, calculate the total metrics utilizing the Emission Fact
 
 def mock_response(user_text: str) -> ApiResponse:
     """Provide a deterministic mock response for demo mode.
-    
+
     Args:
         user_text: The raw user input.
-        
+
     Returns:
         A mocked JSON dictionary matching the ApiResponse schema.
     """
@@ -128,22 +129,22 @@ def mock_response(user_text: str) -> ApiResponse:
 
 def run_orchestrator(user_text: str, ledger: str, api_key: str = "", call_count: int = 0) -> ApiResponse:
     """Route the request to the API or the mock depending on credentials.
-    
+
     Args:
         user_text: Sanitized user text.
         ledger: Ledger text.
         api_key: API key (optional).
         call_count: Current number of API calls made in this session.
-        
+
     Returns:
         Evaluated payload dictionary.
-        
+
     Raises:
         RuntimeError: If rate limit is exceeded.
     """
     if call_count > MAX_API_CALLS_PER_SESSION:
         raise RuntimeError("Rate limit reached. Maximum API calls per session exceeded.")
-        
+
     if api_key:
         try:
             return call_gemini(user_text, ledger, api_key)

@@ -4,17 +4,17 @@ __version__ = "2.1.0"
 
 import streamlit as st
 
+from agents import run_orchestrator
+from config import DAILY_CEILING_KG, MAX_API_CALLS_PER_SESSION, RANK_CFG, STATUS_CFG
+from ui import budget_bar_html, get_css, render_donut_chart, render_trend_chart
+from utils import sanitize_input, validate_input_length
+
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="EcoNode | Carbon Intelligence",
     page_icon="🌱",
     layout="centered"
 )
-
-from config import STATUS_CFG, RANK_CFG, DAILY_CEILING_KG, MAX_API_CALLS_PER_SESSION, MAX_INPUT_LENGTH
-from utils import sanitize_input, validate_input_length
-from agents import run_orchestrator
-from ui import get_css, budget_bar_html, render_donut_chart, render_trend_chart
 
 # Inject CSS
 st.markdown(get_css(), unsafe_allow_html=True)
@@ -54,28 +54,28 @@ with st.sidebar:
     )
     if not api_key:
         st.warning("Running in **Demo Mode**. Synthetic data will be used. Provide an API key for live inference.")
-        
+
     st.markdown("---")
-    
+
     # Real-time Telemetry
     st.markdown('<div class="section-label">📈 Real-time Telemetry</div>', unsafe_allow_html=True)
-    
+
     col1, col2 = st.columns(2)
     with col1:
         st.metric("Logs Processed", st.session_state.log_count)
     with col2:
         st.metric("Total CO₂e (kg)", f"{st.session_state.total_today:.2f}")
-        
+
     # Weekly Projection
     weekly_proj = st.session_state.total_today * 7
     st.metric("Weekly Projection", f"{weekly_proj:.2f} kg", delta=f"{weekly_proj - (DAILY_CEILING_KG*7):.2f} kg vs Budget", delta_color="inverse")
-        
+
     st.markdown("<br>", unsafe_allow_html=True)
-    
+
     # Daily Budget
     st.markdown('<div class="section-label">📊 Daily Budget</div>', unsafe_allow_html=True)
     st.markdown(budget_bar_html(st.session_state.total_today, DAILY_CEILING_KG), unsafe_allow_html=True)
-    
+
     # System Rank
     st.markdown('<div class="section-label">🏆 System Rank</div>', unsafe_allow_html=True)
     rank_info = RANK_CFG.get(st.session_state.system_status, RANK_CFG["OPTIMAL"])
@@ -84,12 +84,12 @@ with st.sidebar:
         {rank_info['label']}
     </div>
     """, unsafe_allow_html=True)
-    
+
     # Carbon Recovery Plan (if deficit > 5 kg)
     if st.session_state.total_today > (DAILY_CEILING_KG + 5.0):
         st.markdown('<div class="section-label">🚨 Carbon Recovery Plan</div>', unsafe_allow_html=True)
         st.info("1. Switch to plant-based meals for 2 days.\n2. Work from home tomorrow.\n3. Shift all ML workloads to off-peak hours (11 PM - 5 AM).")
-    
+
     # Carbon Trend Chart
     if st.session_state.trend_history:
         st.markdown('<div class="section-label">📉 Carbon Trend</div>', unsafe_allow_html=True)
@@ -102,23 +102,23 @@ for msg in st.session_state.messages:
 
 # Chat Input & Orchestration
 if user_input := st.chat_input("Log your commute, diet, energy, and compute workloads..."):
-    
+
     try:
         validate_input_length(user_input)
     except ValueError as e:
         st.error(str(e))
         st.stop()
-        
+
     if st.session_state.api_calls >= MAX_API_CALLS_PER_SESSION and api_key:
         st.error("Rate limit reached. Maximum API calls per session exceeded.")
         st.stop()
-        
+
     safe_input = sanitize_input(user_input)
-    
+
     st.session_state.messages.append({"role": "user", "content": safe_input})
     with st.chat_message("user"):
         st.markdown(safe_input)
-        
+
     if api_key:
         st.session_state.api_calls += 1
 
@@ -132,14 +132,14 @@ if user_input := st.chat_input("Log your commute, diet, energy, and compute work
 
         status = data.get("system_status", "OPTIMAL")
         cfg = STATUS_CFG.get(status, STATUS_CFG["OPTIMAL"])
-        
+
         # Header Badge
         st.markdown(f"""
         <div class="status-badge" style="background:{cfg['color']}15; color:{cfg['color']}; border:1px solid {cfg['color']}50;" role="status" aria-label="System status: {status}">
             <span aria-hidden="true">{cfg['icon']}</span> SYSTEM {status}
         </div>
         """, unsafe_allow_html=True)
-        
+
         # Directive
         directive = data.get("deployment_directive", "Maintain current operational parameters.")
         st.markdown(f"""
@@ -147,7 +147,7 @@ if user_input := st.chat_input("Log your commute, diet, energy, and compute work
             <span>ACTION REQUIRED:</span> {directive}
         </div>
         """, unsafe_allow_html=True)
-        
+
         metrics = data.get("ingestion_metrics", {})
         total_kg = metrics.get("total_co2e_kg", 0.0)
         workloads = metrics.get("workloads_detected", [])

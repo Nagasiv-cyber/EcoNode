@@ -2,21 +2,22 @@
 
 __version__ = "2.1.0"
 
+from typing import Dict, List
+
+import pandas as pd
 import streamlit as st
 try:
     import plotly.graph_objects as go
     PLOTLY_AVAILABLE = True
 except ImportError:
     PLOTLY_AVAILABLE = False
-import pandas as pd
-from typing import Dict, List
 
 from config import CHART_COLORS
 
 @st.cache_data
 def get_css() -> str:
     """Return the cached CSS styling block.
-    
+
     Returns:
         HTML string containing CSS styles.
     """
@@ -24,7 +25,7 @@ def get_css() -> str:
     <!-- Content Security Policy: Google Fonts -->
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    
+
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
@@ -32,7 +33,7 @@ def get_css() -> str:
         background-color: #020617;
         color: #f8fafc;
     }
-    
+
     /* Ensure visible focus indicators for accessibility */
     *:focus-visible {
         outline: 2px solid #10b981 !important;
@@ -42,7 +43,7 @@ def get_css() -> str:
     .eco-optimal { background-color: #064e3b !important; color: #34d399 !important; border: 1px solid #10b981; }
     .eco-warning  { background-color: #78350f !important; color: #fbbf24 !important; border: 1px solid #f59e0b; }
     .eco-critical { background-color: #7f1d1d !important; color: #f87171 !important; border: 1px solid #ef4444; }
-    
+
     .status-badge {
         padding: 0.35rem 0.8rem;
         border-radius: 9999px;
@@ -55,7 +56,7 @@ def get_css() -> str:
         gap: 0.4rem;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
     }
-    
+
     .directive-banner {
         background: rgba(30, 41, 59, 0.7);
         border-left: 4px solid #3b82f6;
@@ -74,7 +75,7 @@ def get_css() -> str:
         font-weight: 700;
         margin-right: 0.5rem;
     }
-    
+
     .budget-track {
         background: #1e293b;
         border-radius: 9999px;
@@ -89,7 +90,7 @@ def get_css() -> str:
         border-radius: 9999px;
         transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    
+
     .section-label {
         font-size: 0.8rem;
         text-transform: uppercase;
@@ -99,7 +100,7 @@ def get_css() -> str:
         margin-bottom: 0.75rem;
         margin-top: 0.5rem;
     }
-    
+
     .agent-card {
         background: rgba(15, 23, 42, 0.6);
         border: 1px solid #334155;
@@ -120,7 +121,7 @@ def get_css() -> str:
         color: #cbd5e1;
         line-height: 1.6;
     }
-    
+
     .workload-tag {
         background: #1e293b;
         border-left: 2px solid #10b981;
@@ -138,11 +139,11 @@ def get_css() -> str:
 
 def budget_bar_html(used: float, ceiling: float = 15.0) -> str:
     """Generate the HTML string for the real-time budget progress bar.
-    
+
     Args:
         used: The amount of CO2e used.
         ceiling: The maximum allowed CO2e.
-        
+
     Returns:
         HTML string.
     """
@@ -163,7 +164,7 @@ def budget_bar_html(used: float, ceiling: float = 15.0) -> str:
 
 def render_donut_chart(breakdown: Dict[str, float]) -> None:
     """Render a Plotly donut chart for the emission breakdown.
-    
+
     Args:
         breakdown: Dictionary mapping source strings to float values.
     """
@@ -210,7 +211,7 @@ def render_donut_chart(breakdown: Dict[str, float]) -> None:
 
 def render_trend_chart(history: List[float]) -> None:
     """Render a simple line chart of total CO2e per session turn.
-    
+
     Args:
         history: List of floats representing total CO2e over time.
     """
