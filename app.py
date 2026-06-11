@@ -867,4 +867,3 @@ if prompt := st.chat_input("Log your travel, meals, energy use, or compute workl
             f"**Status:** `{status}` &nbsp;·&nbsp; **Impact:** `{total_kg:.2f} kg CO2e`"
         ),
     })
-    st.rerun()
