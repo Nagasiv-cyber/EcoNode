@@ -1,789 +1,174 @@
+"""
+EcoNode Main Application Entry.
+
+Version: 2.1.0
+"""
+__version__ = "2.1.0"
+
 import streamlit as st
-import json
-import re
-import time
-import datetime
 
-# ── Optional imports ───────────────────────────────────────────────────────────
-try:
-    import google.generativeai as genai
-    GENAI_AVAILABLE = True
-except ImportError:
-    GENAI_AVAILABLE = False
-
-try:
-    import plotly.graph_objects as go
-    PLOTLY_AVAILABLE = True
-except ImportError:
-    PLOTLY_AVAILABLE = False
-
-# ══════════════════════════════════════════════════════════════════════════════
-# PAGE CONFIGURATION
-# ══════════════════════════════════════════════════════════════════════════════
+# --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="EcoNode | Carbon Intelligence",
     page_icon="🌱",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={"About": "EcoNode — Multi-Agent Carbon Auditing Platform v2.0"},
+    layout="centered"
 )
 
-# ══════════════════════════════════════════════════════════════════════════════
-# PREMIUM CSS  (dark glassmorphism, green accent system, Inter + JetBrains Mono)
-# ══════════════════════════════════════════════════════════════════════════════
-CUSTOM_CSS = """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+from config import STATUS_CFG, RANK_CFG, DAILY_CEILING_KG, MAX_API_CALLS_PER_SESSION, MAX_INPUT_LENGTH
+from utils import sanitize_input, validate_input_length
+from agents import run_orchestrator
+from ui import get_css, budget_bar_html, render_donut_chart, render_trend_chart
 
-/* ── Global reset ─────────────────────────────────────────── */
-html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
-#MainMenu, footer, header { visibility: hidden; }
-.block-container { padding-top: 0.8rem !important; max-width: 1100px; }
+# Inject CSS
+st.markdown(get_css(), unsafe_allow_html=True)
 
-/* ── App background ───────────────────────────────────────── */
-.stApp {
-    background: radial-gradient(ellipse at top left, #071c38 0%, #050d1a 55%, #06121f 100%);
-    min-height: 100vh;
-}
+# Session State Initialization
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "ledger_state" not in st.session_state:
+    st.session_state.ledger_state = f"System initialized. Active daily ceiling: {DAILY_CEILING_KG} kg CO2e."
+if "total_today" not in st.session_state:
+    st.session_state.total_today = 0.0
+if "system_status" not in st.session_state:
+    st.session_state.system_status = "OPTIMAL"
+if "log_count" not in st.session_state:
+    st.session_state.log_count = 0
+if "api_calls" not in st.session_state:
+    st.session_state.api_calls = 0
+if "trend_history" not in st.session_state:
+    st.session_state.trend_history = []
 
-/* ── Sidebar ──────────────────────────────────────────────── */
-[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #06111f 0%, #091828 100%) !important;
-    border-right: 1px solid rgba(16, 185, 129, 0.12) !important;
-}
-[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
-[data-testid="stSidebar"] .stButton button {
-    background: rgba(16,185,129,0.08) !important;
-    border: 1px solid rgba(16,185,129,0.25) !important;
-    color: #34d399 !important;
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    transition: all 0.2s ease !important;
-}
-[data-testid="stSidebar"] .stButton button:hover {
-    background: rgba(16,185,129,0.18) !important;
-    border-color: rgba(16,185,129,0.5) !important;
-}
+# Top Header
+st.markdown("""
+<div style="text-align: center; margin-bottom: 2rem;">
+    <h1 style="font-weight: 700; margin-bottom: 0.2rem;">🌱 EcoNode</h1>
+    <p style="color: #94a3b8; font-size: 1.1rem; font-weight: 300;">Multi-Agent Carbon Intelligence Engine</p>
+</div>
+""", unsafe_allow_html=True)
 
-/* ── Chat messages ────────────────────────────────────────── */
-[data-testid="stChatMessage"] {
-    background: rgba(10, 20, 40, 0.75) !important;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    border-radius: 16px !important;
-    padding: 1rem 1.2rem !important;
-    backdrop-filter: blur(14px);
-    margin-bottom: 0.5rem !important;
-}
-
-/* ── Chat input ───────────────────────────────────────────── */
-[data-testid="stChatInput"] {
-    background: rgba(10, 20, 40, 0.85) !important;
-    border: 1px solid rgba(16, 185, 129, 0.25) !important;
-    border-radius: 14px !important;
-}
-[data-testid="stChatInput"]:focus-within {
-    border-color: rgba(16, 185, 129, 0.55) !important;
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.08) !important;
-}
-
-/* ── Metrics ──────────────────────────────────────────────── */
-[data-testid="stMetric"] {
-    background: rgba(16, 185, 129, 0.05) !important;
-    border: 1px solid rgba(16, 185, 129, 0.13) !important;
-    border-radius: 12px !important;
-    padding: 0.75rem 1rem !important;
-    transition: border-color 0.2s;
-}
-[data-testid="stMetric"]:hover { border-color: rgba(16,185,129,0.3) !important; }
-[data-testid="stMetricValue"] { color: #34d399 !important; font-weight: 700 !important; font-size: 1.3rem !important; }
-[data-testid="stMetricLabel"] { color: #64748b !important; font-size: 0.72rem !important; text-transform: uppercase; letter-spacing: 0.06em; }
-[data-testid="stMetricDelta"] { font-size: 0.75rem !important; }
-
-/* ── Tabs ─────────────────────────────────────────────────── */
-[data-testid="stTabs"] [data-baseweb="tab-list"] {
-    background: rgba(10, 20, 40, 0.6) !important;
-    border-radius: 10px !important;
-    padding: 3px !important;
-    gap: 2px !important;
-    border: 1px solid rgba(255,255,255,0.06) !important;
-}
-[data-testid="stTabs"] [data-baseweb="tab"] {
-    background: transparent !important;
-    border-radius: 8px !important;
-    color: #64748b !important;
-    font-size: 0.8rem !important;
-    font-weight: 600 !important;
-    padding: 0.4rem 0.8rem !important;
-    transition: all 0.15s ease !important;
-}
-[data-testid="stTabs"] [aria-selected="true"] {
-    background: rgba(16, 185, 129, 0.15) !important;
-    color: #34d399 !important;
-}
-[data-testid="stTabs"] [data-baseweb="tab-panel"] {
-    background: rgba(10, 20, 40, 0.45) !important;
-    border: 1px solid rgba(255,255,255,0.05) !important;
-    border-radius: 0 10px 10px 10px !important;
-    padding: 1rem !important;
-}
-
-/* ── Expanders ────────────────────────────────────────────── */
-[data-testid="stExpander"] {
-    background: rgba(10, 20, 40, 0.55) !important;
-    border: 1px solid rgba(255, 255, 255, 0.07) !important;
-    border-radius: 10px !important;
-}
-[data-testid="stExpander"] summary { color: #64748b !important; font-size: 0.82rem !important; }
-
-/* ── Divider ──────────────────────────────────────────────── */
-hr { border-color: rgba(255,255,255,0.07) !important; margin: 0.6rem 0 !important; }
-
-/* ── Scrollbar ────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(16,185,129,0.35); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(16,185,129,0.6); }
-
-/* ── Spinner ──────────────────────────────────────────────── */
-.stSpinner > div { border-top-color: #10b981 !important; }
-
-/* ── CUSTOM COMPONENTS ────────────────────────────────────── */
-
-/* Status pill */
-.eco-status-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.35rem 1rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-.eco-optimal { background: rgba(16,185,129,0.12); border: 1px solid #10b981; color: #34d399; }
-.eco-warning  { background: rgba(245,158,11,0.12); border: 1px solid #f59e0b; color: #fbbf24; }
-.eco-critical { background: rgba(239,68,68,0.12);  border: 1px solid #ef4444; color: #f87171; }
-
-/* Page header */
-.eco-page-title {
-    font-size: 1.9rem;
-    font-weight: 800;
-    letter-spacing: -0.04em;
-    background: linear-gradient(135deg, #10b981 0%, #34d399 50%, #6ee7b7 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    line-height: 1.1;
-    margin: 0;
-}
-.eco-page-subtitle {
-    color: #334155;
-    font-size: 0.72rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    margin-top: 0.2rem;
-}
-
-/* Directive banner */
-.eco-directive {
-    background: linear-gradient(135deg, rgba(16,185,129,0.09), rgba(5,150,105,0.04));
-    border: 1px solid rgba(16,185,129,0.22);
-    border-left: 3px solid #10b981;
-    border-radius: 10px;
-    padding: 0.85rem 1.1rem;
-    margin: 0.6rem 0;
-    color: #a7f3d0;
-    font-size: 0.88rem;
-    line-height: 1.55;
-}
-.eco-directive strong { color: #34d399; display: block; margin-bottom: 0.25rem; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; }
-
-/* Agent insight cards */
-.agent-card {
-    background: rgba(8, 18, 35, 0.55);
-    border: 1px solid rgba(255,255,255,0.055);
-    border-radius: 10px;
-    padding: 1rem 1.2rem;
-    margin: 0.3rem 0;
-    color: #94a3b8;
-    font-size: 0.87rem;
-    line-height: 1.65;
-}
-.agent-card-label {
-    color: #334155;
-    font-size: 0.68rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-}
-.agent-card-body { color: #cbd5e1; }
-
-/* Workload tag */
-.workload-tag {
-    background: rgba(16,185,129,0.06);
-    border: 1px solid rgba(16,185,129,0.12);
-    border-radius: 6px;
-    padding: 0.35rem 0.65rem;
-    margin: 0.22rem 0;
-    font-size: 0.76rem;
-    color: #94a3b8;
-    display: flex;
-    align-items: flex-start;
-    gap: 0.4rem;
-}
-
-/* Budget bar */
-.budget-track {
-    background: rgba(255,255,255,0.07);
-    border-radius: 6px;
-    height: 7px;
-    overflow: hidden;
-    margin: 4px 0 2px;
-}
-.budget-fill {
-    height: 100%;
-    border-radius: 6px;
-    transition: width 0.6s cubic-bezier(.4,0,.2,1);
-}
-
-/* Sidebar logo */
-.sidebar-logo {
-    text-align: center;
-    padding: 1.2rem 0 1rem;
-}
-.sidebar-logo-icon { font-size: 2.2rem; }
-.sidebar-logo-name {
-    font-size: 1.15rem;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    background: linear-gradient(135deg, #10b981, #34d399);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-.sidebar-logo-sub {
-    font-size: 0.62rem;
-    color: #334155 !important;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    margin-top: 0.1rem;
-}
-
-/* Rank badge */
-.rank-badge {
-    display: inline-block;
-    padding: 0.3rem 0.9rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-}
-
-/* Timestamp mono */
-.ts-mono {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
-    color: #334155;
-}
-
-/* Section divider label */
-.section-label {
-    color: #475569;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin: 0.8rem 0 0.4rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-.section-label::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: rgba(255,255,255,0.06);
-}
-</style>
-"""
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# MASTER ORCHESTRATOR PROMPT  (Phases 1-4)
-# ══════════════════════════════════════════════════════════════════════════════
-MASTER_PROMPT = """
-ROLE AND SYSTEM BOUNDARIES:
-You are the hyper-optimized Core Inference Engine for EcoNode. Your purpose is to process multi-modal user activity logs and execute deterministic Carbon Auditing, GreenOps compute calculation, and Ledger state balancing. You must operate with 100% logical consistency.
-
-PHASE 1: DETERMINISTIC EMISSION FACTOR MATRIX (R&D GROUNDING)
-When evaluating inputs, you must map activities strictly against these scientific baselines:
-- Petrol Sedan: 0.170 kg CO2e per km
-- Electric Auto-Rickshaw: 0.045 kg CO2e per km (based on Indian grid average)
-- High-Efficiency ML Training (NVIDIA RTX 4070 Laptop GPU full load): ~0.095 kg CO2e per hour of active compute.
-- Grid Peak Hours (11:00 AM - 6:00 PM): High carbon intensity (coal-dominant baseline).
-- Grid Off-Peak Hours (11:00 PM - 5:00 AM): Low carbon intensity (wind/solar integration baseline).
-- South Indian Vegetarian Meal (Idli/Sambar/Rice): 0.600 kg CO2e per meal.
-- Poultry-based Meal (Chicken Biryani): 2.500 kg CO2e per meal.
-
-PHASE 2: CONTEXTUAL ROUTING ENGINE
-1. Read the provided [HISTORICAL LEDGER BASELINE]. Extract the rolling balance.
-2. If the previous state indicates a DEFICIT, you must scale down today's dynamic ceiling allocation from 15.0 kg to exactly: (15.0 - absolute_deficit_value).
-3. Evaluate [USER INPUT]. Isolate lifestyle events from technical machine learning/software scripts.
-
-PHASE 3: STRATEGIC GREENOPS & BEHAVIORAL INFERENCE
-- Compute Workloads: If active GPU usage exceeds 2.0 hours during Grid Peak Hours, you must flag a SYSTEM_STATUS warning and issue an optimization instruction specifying an exact time-shift window (e.g., post 11:00 PM).
-- Lifestyle Shifts: If transit emissions cross 5.0 kg CO2e alone, generate an immediate public transport or EV-swap alternative directive.
-
-PHASE 4: STRICT DEPLOYMENT PAYLOAD ENFORCEMENT
-You must output a single, valid JSON object. Do not include markdown fences (like ```json), no trailing commas, and no conversational prefixes or suffixes.
-
-JSON SCHEMA:
-{
-  "execution_timestamp": "ISO-8601 string",
-  "system_status": "OPTIMAL" | "WARNING" | "CRITICAL",
-  "ingestion_metrics": {
-    "workloads_detected": ["List of strings"],
-    "total_co2e_kg": 0.00
-  },
-  "agent_outputs": {
-    "compute_optimizations": "String containing specific hardware runtime shifting data or alternative code-efficiency metrics.",
-    "lifestyle_optimizations": "String containing precise dietary or transit carbon corrections.",
-    "ledger_state": "Current rolling balance metrics, budget status flags, and updated tracking parameters."
-  },
-  "deployment_directive": "A concise, single-sentence high-impact operational instruction for the frontend dashboard UI."
-}
-"""
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# HELPER UTILITIES
-# ══════════════════════════════════════════════════════════════════════════════
-
-STATUS_CFG = {
-    "OPTIMAL": {"icon": "🟢", "cls": "eco-optimal", "color": "#10b981"},
-    "WARNING":  {"icon": "🟡", "cls": "eco-warning",  "color": "#f59e0b"},
-    "CRITICAL": {"icon": "🔴", "cls": "eco-critical",  "color": "#ef4444"},
-}
-
-RANK_CFG = {
-    "OPTIMAL": {"label": "🌿 Carbon Neutral",   "bg": "#052e16", "fg": "#34d399", "border": "#10b981"},
-    "WARNING":  {"label": "⚠️ Carbon Debtor L1", "bg": "#451a03", "fg": "#fbbf24", "border": "#f59e0b"},
-    "CRITICAL": {"label": "🔴 Carbon Debtor L2", "bg": "#450a0a", "fg": "#f87171", "border": "#ef4444"},
-}
-
-CHART_COLORS = [
-    "#10b981", "#34d399", "#f59e0b", "#ef4444",
-    "#8b5cf6", "#06b6d4", "#ec4899", "#f97316",
-    "#a3e635", "#fb923c",
-]
-
-
-def extract_json(text: str) -> dict:
-    """Robustly extract a JSON object from an AI response string."""
-    text = text.strip()
-    # 1. Direct parse
-    try:
-        return json.loads(text)
-    except Exception:
-        pass
-    # 2. Strip markdown fences
-    fence = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
-    if fence:
-        try:
-            return json.loads(fence.group(1))
-        except Exception:
-            pass
-    # 3. First brace-to-brace block
-    brace = re.search(r"\{[\s\S]*\}", text)
-    if brace:
-        try:
-            return json.loads(brace.group(0))
-        except Exception:
-            pass
-    raise ValueError("No valid JSON object found in model response.")
-
-
-def budget_bar_html(used: float, ceiling: float = 15.0) -> str:
-    pct = min(used / max(ceiling, 0.01) * 100, 100)
-    color = "#10b981" if pct <= 70 else "#f59e0b" if pct <= 100 else "#ef4444"
-    return f"""
-    <div style="margin:0.2rem 0 0.5rem;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-            <span style="color:#475569;font-size:0.7rem;font-weight:600;">{used:.2f} kg used</span>
-            <span style="color:#334155;font-size:0.7rem;">of {ceiling:.1f} kg</span>
-        </div>
-        <div class="budget-track">
-            <div class="budget-fill" style="width:{pct:.1f}%;background:linear-gradient(90deg,{color},{color}88);"></div>
-        </div>
-    </div>
-    """
-
-
-def render_donut_chart(breakdown: dict):
-    if not PLOTLY_AVAILABLE or not breakdown:
-        return
-    labels = list(breakdown.keys())
-    values = list(breakdown.values())
-    colors = CHART_COLORS[: len(labels)]
-    total  = sum(values)
-
-    fig = go.Figure(go.Pie(
-        labels=labels,
-        values=values,
-        hole=0.64,
-        marker=dict(colors=colors, line=dict(color="rgba(0,0,0,0)", width=0)),
-        textfont=dict(family="Inter", size=10, color="white"),
-        hovertemplate="<b>%{label}</b><br>%{value:.2f} kg CO2e  ·  %{percent}<extra></extra>",
-        pull=[0.04 if v == max(values) else 0 for v in values],
-    ))
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=8, r=8, t=8, b=8),
-        height=270,
-        showlegend=True,
-        legend=dict(
-            font=dict(family="Inter", size=9, color="#64748b"),
-            bgcolor="rgba(0,0,0,0)",
-            orientation="v",
-            x=1.02,
-            y=0.5,
-            itemsizing="constant",
-        ),
-        annotations=[dict(
-            text=f"<b style='font-size:15px'>{total:.2f}</b><br>kg CO₂e",
-            x=0.5, y=0.5,
-            font=dict(family="Inter", size=13, color="#e2e8f0"),
-            showarrow=False,
-            align="center",
-        )],
-    )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-
-# ── Mock response (used when API key is absent) ───────────────────────────────
-def mock_response(user_text: str) -> dict:
-    time.sleep(2.2)
-    return {
-        "execution_timestamp": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "system_status": "WARNING",
-        "ingestion_metrics": {
-            "workloads_detected": [
-                "Transit: Gasoline sedan — 22 km commute",
-                "Transit: Electric auto-rickshaw — 4 km lunch trip",
-                "Diet: South Indian breakfast (Idli & Sambar)",
-                "Diet: Chicken biryani — lunch",
-                "Diet: Plant-based dinner (Dal & Rice)",
-                "Energy: Workspace AC — 6 h continuous @ 21 °C",
-                "Compute: GreenArb backtest — RTX 4070 Laptop, 3.5 h peak grid (14:00–17:30 IST)",
-            ],
-            "total_co2e_kg": 15.61,
-        },
-        "emission_breakdown": {
-            "Gasoline Sedan (22 km)":   4.62,
-            "Electric Rickshaw (4 km)": 0.02,
-            "Breakfast – Idli/Sambar":  0.50,
-            "Lunch – Chicken Biryani":  2.10,
-            "Dinner – Dal & Rice":      0.40,
-            "Workspace AC (6 h)":       7.38,
-            "GPU Compute (3.5 h)":      0.59,
-        },
-        "agent_outputs": {
-            "compute_optimizations": (
-                "GreenOps Directive: GreenArb executed during peak thermal window (14:00–17:30 IST, "
-                "grid intensity ×1.18 multiplier applied). Actual compute emission: 0.59 kg CO2e. "
-                "Recommendation #1 — TIME-SHIFT: Defer next GreenArb cycle to 00:00–04:00 IST "
-                "(off-peak grid, ×0.76 factor). Projected saving: ~0.20 kg CO2e per session. "
-                "Recommendation #2 — CHUNKED EXECUTION: Split 5-year HFT dataset into rolling "
-                "12-month windows to reduce VRAM pressure by ~18% and GPU utilisation from 98% → 72%. "
-                "Recommendation #3 — CODE EFFICIENCY: Migrate pandas pipeline to PyArrow backend "
-                "(pd.options.mode.dtype_backend='pyarrow') for 1.8–2.4× faster I/O; use joblib "
-                "parallel_backend for sklearn cross-validation to eliminate GPU idle-wait cycles. "
-                "Combined, these measures project a 47% per-session emission reduction: 0.31 kg CO2e."
-            ),
-            "lifestyle_optimizations": (
-                "Hotspot Ranking: (1) Workspace AC 7.38 kg [47.3%] (2) Gasoline Sedan 4.62 kg [29.6%] "
-                "(3) Chicken Biryani 2.10 kg [13.5%]. "
-                "Recommendation #1 — AC SETPOINT: Raise 21°C → 24°C (BEE India standard). Each °C = "
-                "~6% load reduction; 3°C gain = 18% = −1.33 kg CO2e. Add 2 h pre-cool + economy schedule "
-                "for further −0.80 kg CO2e. Total AC intervention: −2.13 kg CO2e. "
-                "Recommendation #2 — COMMUTE: Carpool with one colleague (split emissions): −2.31 kg/day. "
-                "Two WFH days/week: −9.24 kg/week (40% commute reduction). "
-                "Recommendation #3 — DIET: Substitute chicken biryani with plant-based biryani (mushroom/paneer) "
-                "3×/week: −4.95 kg CO2e/week. Tonight's plant-based dinner was optimal — maintain streak."
-            ),
-            "ledger_state": (
-                "LEDGER REPORT — June 11, 2026 | "
-                "Yesterday (June 10): 18.50 kg CO2e → Deficit: −3.50 kg. "
-                "Today adjusted ceiling: 11.50 kg (15.0 − 3.50 carryover). "
-                "Today actual: 15.61 kg. Overshoot vs adjusted ceiling: +4.11 kg. "
-                "Cumulative 2-day deficit: −4.11 kg CO2e (avg 17.06 kg/day vs 15.0 target). "
-                "Tomorrow's mandatory ceiling: 10.89 kg CO2e [= 45.0 − 34.11]. "
-                "Gamified Rank: 🔴 Carbon Debtor L2 — Day 2 consecutive deficit. "
-                "Risk: 3rd consecutive deficit triggers CRITICAL cascade status."
-            ),
-        },
-        "deployment_directive": (
-            "Raise AC setpoint to 24 °C immediately and plan WFH for June 12 to stay within "
-            "the 10.89 kg rebalancing ceiling and prevent a 3-day CRITICAL cascade."
-        ),
-    }
-
-
-# ── Gemini API call ───────────────────────────────────────────────────────────
-def call_gemini(user_text: str, ledger: str, api_key: str) -> dict:
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-pro-latest",
-        generation_config=genai.types.GenerationConfig(
-            temperature=0.1,
-            response_mime_type="application/json",
-        ),
-        system_instruction=MASTER_PROMPT,
-    )
-    payload = f"""
-[CONTEXTUAL BOUNDARY CONDITIONS]
-- Current System Date: 2026-06-11
-- Standard Maximum Ceiling: 15.0 kg CO2e
-- Missing Fields Handling: If a data type (e.g., Diet or Energy) is absent from the input, assign an impact of 0.00 kg CO2e and mark its agent insight as 'No active logging detected for this sector.'
-
-[HISTORICAL LEDGER BASELINE]
-{ledger}
-
-[USER INPUT PAYLOAD]
-{user_text}
-
-EXECUTION INSTRUCTION:
-Parse the payload above, calculate the total metrics utilizing the Emission Factor Matrix, apply the ledger rules, and generate the pure JSON response matching the required schema.
-"""
-    response = model.generate_content(payload)
-    return extract_json(response.text)
-
-
-def run_orchestrator(user_text: str, ledger: str, api_key: str = "") -> dict:
-    if api_key and GENAI_AVAILABLE:
-        try:
-            return call_gemini(user_text, ledger, api_key)
-        except Exception as exc:
-            st.toast(f"⚠️ Gemini error: {exc} — falling back to demo mode", icon="⚠️")
-    return mock_response(user_text)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# SESSION STATE INITIALISATION
-# ══════════════════════════════════════════════════════════════════════════════
-_defaults = {
-    "ledger_state": "Status: Neutral. Daily Allowance: 15.0 kg CO2e. No prior history loaded.",
-    "messages":     [],
-    "total_today":  0.0,
-    "system_status": "OPTIMAL",
-    "log_count":    0,
-}
-for _k, _v in _defaults.items():
-    if _k not in st.session_state:
-        st.session_state[_k] = _v
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# SIDEBAR
-# ══════════════════════════════════════════════════════════════════════════════
-api_key = ""  # scoped globally for the main section below
-
+# Sidebar
 with st.sidebar:
-    st.markdown("""
-    <div class="sidebar-logo">
-        <div class="sidebar-logo-icon">🌱</div>
-        <div class="sidebar-logo-name">EcoNode</div>
-        <div class="sidebar-logo-sub">Carbon Intelligence · v2.0</div>
-    </div>
-    """, unsafe_allow_html=True)
-    st.divider()
-
-    # ── API Configuration ─────────────────────────────────────────────────
-    st.markdown('<div class="section-label">🔑 API Configuration</div>', unsafe_allow_html=True)
+    st.markdown("### 🔑 Authentication")
     api_key = st.text_input(
-        "Google Gemini API Key",
+        "Gemini API Key",
         type="password",
         placeholder="AIzaSy...",
-        help="Get your free key at [aistudio.google.com](https://aistudio.google.com/app/apikey)",
-        label_visibility="collapsed",
+        help="Provide your Google Gemini API key. If left blank, the app runs in Demo Mode."
     )
-    if api_key:
-        if GENAI_AVAILABLE:
-            st.success("✅ API key active — Live mode")
-        else:
-            st.warning("⚠️ `google-generativeai` not installed. Run: `pip install google-generativeai`")
-    else:
-        st.info("ℹ️ No API key — Demo mode active")
-
-    st.divider()
-
-    # ── Daily Budget Tracker ──────────────────────────────────────────────
+    if not api_key:
+        st.warning("Running in **Demo Mode**. Synthetic data will be used. Provide an API key for live inference.")
+        
+    st.markdown("---")
+    
+    # Real-time Telemetry
+    st.markdown('<div class="section-label">📈 Real-time Telemetry</div>', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Logs Processed", st.session_state.log_count)
+    with col2:
+        st.metric("Total CO₂e (kg)", f"{st.session_state.total_today:.2f}")
+        
+    # Weekly Projection
+    weekly_proj = st.session_state.total_today * 7
+    st.metric("Weekly Projection", f"{weekly_proj:.2f} kg", delta=f"{weekly_proj - (DAILY_CEILING_KG*7):.2f} kg vs Budget", delta_color="inverse")
+        
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Daily Budget
     st.markdown('<div class="section-label">📊 Daily Budget</div>', unsafe_allow_html=True)
-    st.markdown(budget_bar_html(st.session_state.total_today, 15.0), unsafe_allow_html=True)
-
-    # ── Carbon Rank ───────────────────────────────────────────────────────
-    rank = RANK_CFG[st.session_state.system_status]
+    st.markdown(budget_bar_html(st.session_state.total_today, DAILY_CEILING_KG), unsafe_allow_html=True)
+    
+    # System Rank
+    st.markdown('<div class="section-label">🏆 System Rank</div>', unsafe_allow_html=True)
+    rank_info = RANK_CFG.get(st.session_state.system_status, RANK_CFG["OPTIMAL"])
     st.markdown(f"""
-    <div style="text-align:center;padding:0.3rem 0 0.6rem;">
-        <div style="font-size:0.62rem;color:#334155;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.4rem;">Current Rank</div>
-        <div class="rank-badge" style="background:{rank['bg']};border:1px solid {rank['border']};color:{rank['fg']};">{rank['label']}</div>
+    <div style="background:{rank_info['bg']}; color:{rank_info['fg']}; border:1px solid {rank_info['border']}; padding:0.5rem; border-radius:0.5rem; text-align:center; font-weight:600; font-size:0.9rem;">
+        {rank_info['label']}
     </div>
     """, unsafe_allow_html=True)
+    
+    # Carbon Recovery Plan (if deficit > 5 kg)
+    if st.session_state.total_today > (DAILY_CEILING_KG + 5.0):
+        st.markdown('<div class="section-label">🚨 Carbon Recovery Plan</div>', unsafe_allow_html=True)
+        st.info("1. Switch to plant-based meals for 2 days.\n2. Work from home tomorrow.\n3. Shift all ML workloads to off-peak hours (11 PM - 5 AM).")
+    
+    # Carbon Trend Chart
+    if st.session_state.trend_history:
+        st.markdown('<div class="section-label">📉 Carbon Trend</div>', unsafe_allow_html=True)
+        render_trend_chart(st.session_state.trend_history)
 
-    st.divider()
-
-    # ── Session Stats ─────────────────────────────────────────────────────
-    st.markdown('<div class="section-label">📈 Session Stats</div>', unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
-    c1.metric("Logs Filed", st.session_state.log_count)
-    c2.metric("CO₂e Today", f"{st.session_state.total_today:.1f} kg")
-
-    st.divider()
-
-    # ── Quick Tips ────────────────────────────────────────────────────────
-    with st.expander("💡 What can I log?", expanded=False):
-        st.markdown("""
-        **🚗 Transit** — car type, km, flights  
-        **🍽️ Diet** — meals, portion types  
-        **⚡ Energy** — AC hours, kWh usage  
-        **💻 Compute** — GPU/CPU jobs, runtimes  
-        **📊 Ledger** — yesterday's total for deficit tracking
-        """)
-
-    st.divider()
-
-    if st.button("🔄 Reset Session", use_container_width=True):
-        for k in ("messages", "log_count"):
-            st.session_state[k] = [] if isinstance(st.session_state[k], list) else 0
-        st.session_state.total_today  = 0.0
-        st.session_state.ledger_state = "Status: Neutral. Daily Allowance: 15.0 kg CO2e."
-        st.session_state.system_status = "OPTIMAL"
-        st.rerun()
-
-    st.markdown("""
-    <div style="text-align:center;padding:1rem 0 0;color:#1e293b;font-size:0.62rem;line-height:1.6;">
-        Powered by Gemini 1.5 Pro<br>
-        Multi-Agent Carbon Protocol v2<br>
-        © 2026 EcoNode Intelligence
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# MAIN AREA — HEADER
-# ══════════════════════════════════════════════════════════════════════════════
-col_title, col_status = st.columns([3, 1])
-with col_title:
-    st.markdown("""
-    <div style="display:flex;align-items:center;gap:0.7rem;margin-bottom:0.1rem;">
-        <span style="font-size:2rem;">🌱</span>
-        <div>
-            <h1 class="eco-page-title">EcoNode Intelligence Engine</h1>
-            <p class="eco-page-subtitle">Compute · Lifestyle · Ledger Protocols Active</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-with col_status:
-    status_now = st.session_state.system_status
-    scfg = STATUS_CFG[status_now]
-    st.markdown(f"""
-    <div style="display:flex;justify-content:flex-end;align-items:center;height:100%;padding-top:0.4rem;">
-        <span class="eco-status-pill {scfg['cls']}">{scfg['icon']} {status_now}</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.divider()
-
-# ── Chat history ──────────────────────────────────────────────────────────────
+# Main Chat Display
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# CHAT INPUT & MAIN EXECUTION LOOP
-# ══════════════════════════════════════════════════════════════════════════════
-if prompt := st.chat_input("Log your travel, meals, energy use, or compute workloads…"):
-
-    # 1. Show user message
+# Chat Input & Orchestration
+if user_input := st.chat_input("Log your commute, diet, energy, and compute workloads..."):
+    
+    if not validate_input_length(user_input):
+        st.error(f"Input exceeds maximum allowed length of {MAX_INPUT_LENGTH} characters.")
+        st.stop()
+        
+    if st.session_state.api_calls >= MAX_API_CALLS_PER_SESSION and api_key:
+        st.error("Rate limit reached. Maximum API calls per session exceeded.")
+        st.stop()
+        
+    safe_input = sanitize_input(user_input)
+    
+    st.session_state.messages.append({"role": "user", "content": safe_input})
     with st.chat_message("user"):
-        st.markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
+        st.markdown(safe_input)
+        
+    if api_key:
+        st.session_state.api_calls += 1
 
-    # 2. Run orchestrator + render dashboard
     with st.chat_message("assistant"):
-        with st.spinner("⚡ Routing to COMPUTE · LIFESTYLE · LEDGER protocols…"):
-            data = run_orchestrator(prompt, st.session_state.ledger_state, api_key)
+        with st.spinner("Multi-Agent Engine evaluating payload..."):
+            try:
+                data = run_orchestrator(safe_input, st.session_state.ledger_state, api_key)
+            except Exception as e:
+                st.error(f"Execution failed: {e}")
+                st.stop()
 
-        status     = data.get("system_status", "WARNING")
-        scfg       = STATUS_CFG.get(status, STATUS_CFG["WARNING"])
-        ts         = data.get("execution_timestamp", "")
-        total_kg   = data["ingestion_metrics"]["total_co2e_kg"]
-        workloads  = data["ingestion_metrics"]["workloads_detected"]
-        breakdown  = data.get("emission_breakdown", {})
-        agents     = data["agent_outputs"]
-        directive  = data.get("deployment_directive", "")
-
-        # ── Status bar ──────────────────────────────────────────────────
+        status = data.get("system_status", "OPTIMAL")
+        cfg = STATUS_CFG.get(status, STATUS_CFG["OPTIMAL"])
+        
+        # Header Badge
         st.markdown(f"""
-        <div style="display:flex;align-items:center;gap:0.7rem;margin-bottom:0.7rem;flex-wrap:wrap;">
-            <span class="eco-status-pill {scfg['cls']}">{scfg['icon']} {status}</span>
-            <span class="ts-mono">{ts}</span>
+        <div class="status-badge" style="background:{cfg['color']}15; color:{cfg['color']}; border:1px solid {cfg['color']}50;" role="status">
+            <span aria-hidden="true">{cfg['icon']}</span> SYSTEM {status}
         </div>
         """, unsafe_allow_html=True)
-
-        # ── Deployment Directive ─────────────────────────────────────────
+        
+        # Directive
+        directive = data.get("deployment_directive", "Maintain current operational parameters.")
         st.markdown(f"""
-        <div class="eco-directive">
-            <strong>🎯 Deployment Directive</strong>
-            {directive}
+        <div class="directive-banner" role="status" aria-live="polite">
+            <span>ACTION REQUIRED:</span> {directive}
         </div>
         """, unsafe_allow_html=True)
+        
+        metrics = data.get("ingestion_metrics", {})
+        total_kg = metrics.get("total_co2e_kg", 0.0)
+        workloads = metrics.get("workloads_detected", [])
+        breakdown = data.get("emission_breakdown", {})
+        agents = data.get("agent_outputs", {})
 
-        # ── Metrics row ──────────────────────────────────────────────────
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric(
-            "🌍 Session Impact",
-            f"{total_kg:.2f} kg",
-            delta=f"{total_kg - 15.0:+.2f} vs budget",
-            delta_color="inverse",
-        )
-        m2.metric("📋 Workloads", len(workloads))
-        top_src = max(breakdown, key=breakdown.get) if breakdown else "N/A"
-        m3.metric("🔥 Top Source", top_src.split("(")[0].strip(), f"{breakdown.get(top_src, 0):.2f} kg")
-        m4.metric("📅 Daily Ceiling", "15.0 kg CO2e")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # ── Chart + Workloads (side by side) ────────────────────────────
         chart_col, list_col = st.columns([1.3, 1])
 
         with chart_col:
-            st.markdown('<div class="section-label">📊 Emission Breakdown</div>', unsafe_allow_html=True)
-            if breakdown and PLOTLY_AVAILABLE:
-                render_donut_chart(breakdown)
-            elif breakdown:
-                max_v = max(breakdown.values())
-                for src, val in sorted(breakdown.items(), key=lambda x: x[1], reverse=True):
-                    pct = val / max_v
-                    st.progress(pct, text=f"{src}: {val:.2f} kg")
-            else:
-                st.caption("No breakdown data returned.")
+            st.markdown('<div class="section-label" aria-label="Emission Breakdown Chart">📊 Emission Breakdown</div>', unsafe_allow_html=True)
+            render_donut_chart(breakdown)
 
         with list_col:
-            st.markdown('<div class="section-label">📋 Detected Workloads</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-label" aria-label="Detected Workloads">📋 Detected Workloads</div>', unsafe_allow_html=True)
             for w in workloads:
-                st.markdown(f'<div class="workload-tag"><span style="color:#10b981;margin-top:1px;">▸</span><span>{w}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="workload-tag"><span style="color:#10b981;margin-top:1px;" aria-hidden="true">▸</span><span>{w}</span></div>', unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # ── Agent Insights (tabbed) ──────────────────────────────────────
-        st.markdown('<div class="section-label">🤖 Agent Intelligence Reports</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-label" aria-label="Agent Intelligence Reports">🤖 Agent Intelligence Reports</div>', unsafe_allow_html=True)
 
         tab_c, tab_l, tab_lg = st.tabs(["💻 Compute Agent", "🏃 Lifestyle Agent", "📊 Ledger Agent"])
 
@@ -822,15 +207,15 @@ if prompt := st.chat_input("Log your travel, meals, energy use, or compute workl
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # ── Raw JSON for evaluators ──────────────────────────────────────
         with st.expander("🛠️ Raw JSON Payload — API / Evaluator View"):
             st.json(data)
 
-        # ── Update session state ─────────────────────────────────────────
-        st.session_state.ledger_state  = agents["ledger_state"]
+        # Update session state (batched)
+        st.session_state.ledger_state  = agents.get("ledger_state", st.session_state.ledger_state)
         st.session_state.total_today  += total_kg
         st.session_state.system_status = status
         st.session_state.log_count    += 1
+        st.session_state.trend_history.append(total_kg)
 
     # Save condensed message to chat history
     st.session_state.messages.append({
