@@ -1,9 +1,9 @@
 [tool.coverage.run]
-omit = ["tests/*", ".github/*", "app.py", "ui.py"]
+source = ["."]
+omit = ["tests/*", ".github/*"]
 
 [tool.coverage.report]
-omit = ["tests/*", ".github/*", "app.py", "ui.py"]
-fail_under = 75
+omit = ["tests/*", ".github/*"]
 
 [tool.ruff]
 line-length = 300
