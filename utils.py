@@ -9,6 +9,7 @@ from typing import Any, Dict
 
 from config import ApiResponse, MAX_INPUT_LENGTH
 
+
 def sanitize_input(user_text: str) -> str:
     """Sanitize user input to prevent XSS and ensure safe logging.
 
@@ -19,6 +20,32 @@ def sanitize_input(user_text: str) -> str:
         HTML-escaped string.
     """
     return html.escape(user_text.strip())
+
+
+def sanitize_user_input(text: str) -> str:
+    """Harden user input against prompt injection and excessive length.
+
+    Applies three layers of defense:
+    1. Strips leading/trailing whitespace.
+    2. Truncates to MAX_INPUT_LENGTH (2000) characters.
+    3. Removes prompt-injection substrings (case-insensitive).
+
+    Args:
+        text: The raw user input from the chat widget.
+
+    Returns:
+        A cleaned, truncated, injection-safe string.
+    """
+    text = text.strip()
+    text = text[:MAX_INPUT_LENGTH]
+    text = re.sub(
+        r"(IGNORE|OVERRIDE|NEW INSTRUCTION|SYSTEM:)",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return text
+
 
 def validate_input_length(user_text: str) -> str:
     """Validate that the input length does not exceed maximum allowed.
@@ -35,6 +62,7 @@ def validate_input_length(user_text: str) -> str:
     if len(user_text) > MAX_INPUT_LENGTH:
         raise ValueError(f"Input exceeds maximum allowed length of {MAX_INPUT_LENGTH} characters.")
     return user_text
+
 
 def validate_response_schema(parsed_json: Dict[str, Any]) -> ApiResponse:
     """Validate that the parsed JSON meets the required schema.
@@ -60,9 +88,8 @@ def validate_response_schema(parsed_json: Dict[str, Any]) -> ApiResponse:
     if "emission_breakdown" not in parsed_json:
         parsed_json["emission_breakdown"] = {}
 
-    # We ignore strict structural type checking of sub-dicts here for brevity,
-    # but the presence of keys ensures basic safety.
     return parsed_json  # type: ignore
+
 
 def extract_json(text: str) -> ApiResponse:
     """Robustly extract a JSON object from an AI response string.
@@ -83,7 +110,7 @@ def extract_json(text: str) -> ApiResponse:
     # 1. Direct parse
     try:
         parsed_json = json.loads(text)
-    except Exception:
+    except json.JSONDecodeError:
         pass
 
     # 2. Strip markdown fences
@@ -92,7 +119,7 @@ def extract_json(text: str) -> ApiResponse:
         if fence:
             try:
                 parsed_json = json.loads(fence.group(1))
-            except Exception:
+            except json.JSONDecodeError:
                 pass
 
     # 3. First brace-to-brace block
@@ -101,7 +128,7 @@ def extract_json(text: str) -> ApiResponse:
         if brace:
             try:
                 parsed_json = json.loads(brace.group(0))
-            except Exception:
+            except json.JSONDecodeError:
                 pass
 
     if not parsed_json:

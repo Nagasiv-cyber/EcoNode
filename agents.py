@@ -4,6 +4,7 @@ __version__ = "2.1.0"
 
 import datetime
 import time
+from typing import Any, Dict
 
 import streamlit as st
 from google import genai
@@ -13,9 +14,10 @@ from config import (
     ApiResponse,
     DAILY_CEILING_KG,
     MASTER_PROMPT,
-    MAX_API_CALLS_PER_SESSION
+    MAX_API_CALLS_PER_SESSION,
 )
 from utils import extract_json
+
 
 @st.cache_resource
 def get_gemini_client(api_key: str) -> genai.Client:
@@ -29,6 +31,7 @@ def get_gemini_client(api_key: str) -> genai.Client:
     """
     return genai.Client(api_key=api_key)
 
+
 def call_gemini(user_text: str, ledger: str, api_key: str) -> ApiResponse:
     """Call the Gemini API with the given payload using the google-genai SDK.
 
@@ -39,6 +42,10 @@ def call_gemini(user_text: str, ledger: str, api_key: str) -> ApiResponse:
 
     Returns:
         The parsed JSON dictionary from the model.
+
+    Raises:
+        ValueError: If the response cannot be parsed as JSON.
+        KeyError: If the response is missing required schema keys.
     """
     client = get_gemini_client(api_key)
     payload = f"""
@@ -67,16 +74,28 @@ Parse the payload above, calculate the total metrics utilizing the Emission Fact
     )
     return extract_json(response.text or "")
 
+
 def mock_response(user_text: str) -> ApiResponse:
     """Provide a deterministic mock response for demo mode.
 
+    Uses dynamically computed dates to avoid hardcoded timestamps. The
+    emission_breakdown values sum exactly to total_co2e_kg (15.61).
+
     Args:
-        user_text: The raw user input.
+        user_text: The raw user input (unused but kept for API symmetry).
 
     Returns:
         A mocked JSON dictionary matching the ApiResponse schema.
     """
     time.sleep(2.2)  # Simulate API latency
+
+    today = datetime.date.today()
+    yesterday = today - datetime.timedelta(days=1)
+    today_str = today.strftime("%B %d, %Y")
+    yesterday_str = yesterday.strftime("%B %d")
+    tomorrow = today + datetime.timedelta(days=1)
+    tomorrow_str = tomorrow.strftime("%B %d")
+
     return {  # type: ignore
         "execution_timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "system_status": "WARNING",
@@ -114,20 +133,26 @@ def mock_response(user_text: str) -> ApiResponse:
                 "Recommendation #1 — AC SETPOINT: Raise 21°C → 24°C (BEE India standard)."
             ),
             "ledger_state": (
-                "LEDGER REPORT — June 11, 2026 | "
-                "Yesterday (June 10): 18.50 kg CO2e → Deficit: −3.50 kg. "
+                f"LEDGER REPORT — {today_str} | "
+                f"Yesterday ({yesterday_str}): 18.50 kg CO2e → Deficit: −3.50 kg. "
                 "Today adjusted ceiling: 11.50 kg (15.0 − 3.50 carryover). "
                 "Today actual: 15.61 kg. Overshoot vs adjusted ceiling: +4.11 kg. "
                 "Gamified Rank: 🔴 Carbon Debtor L2 — Day 2 consecutive deficit."
             ),
         },
         "deployment_directive": (
-            "Raise AC setpoint to 24 °C immediately and plan WFH for June 12 to stay within "
+            f"Raise AC setpoint to 24 °C immediately and plan WFH for {tomorrow_str} to stay within "
             "the 10.89 kg rebalancing ceiling and prevent a 3-day CRITICAL cascade."
         ),
     }
 
-def run_orchestrator(user_text: str, ledger: str, api_key: str = "", call_count: int = 0) -> ApiResponse:
+
+def run_orchestrator(
+    user_text: str,
+    ledger: str,
+    api_key: str = "",
+    call_count: int = 0,
+) -> ApiResponse:
     """Route the request to the API or the mock depending on credentials.
 
     Args:
@@ -148,6 +173,8 @@ def run_orchestrator(user_text: str, ledger: str, api_key: str = "", call_count:
     if api_key:
         try:
             return call_gemini(user_text, ledger, api_key)
+        except (ValueError, KeyError) as exc:
+            st.toast(f"⚠️ Gemini parse error: {exc} — falling back to demo mode", icon="⚠️")
         except Exception as exc:
             st.toast(f"⚠️ Gemini error: {exc} — falling back to demo mode", icon="⚠️")
     return mock_response(user_text)
